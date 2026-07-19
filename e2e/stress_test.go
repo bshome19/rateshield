@@ -63,8 +63,9 @@ func TestE2E_HighConcurrencyStress(t *testing.T) {
 	if allowedCount+blockedCount != totalGoroutines {
 		t.Errorf("Expected total %d requests, got %d", totalGoroutines, allowedCount+blockedCount)
 	}
-	if allowedCount > 5050 { // Allow slight refill during execution
-		t.Errorf("Allowed count %d exceeded expected capacity limit ~5000", allowedCount)
+	maxAllowed := 5000 + int64(duration.Seconds()*1000) + 100
+	if allowedCount > maxAllowed {
+		t.Errorf("Allowed count %d exceeded max allowed %d for duration %v", allowedCount, maxAllowed, duration)
 	}
 }
 
