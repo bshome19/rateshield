@@ -1,6 +1,7 @@
 package rateshield
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -21,6 +22,8 @@ func TestOptions_Apply(t *testing.T) {
 		WithStore(mem),
 		WithTTL(10*time.Minute),
 		WithFailStrategy(FailClosed),
+		WithKeyExtractor(func(r *http.Request) string { return "custom" }),
+		WithMetrics(nil),
 	)
 
 	if opts.Algorithm != SlidingWindowCounterAlgorithm {

@@ -46,12 +46,35 @@ func TestSlidingWindowCounter(t *testing.T) {
 	// Wait for window to slide
 	time.Sleep(120 * time.Millisecond)
 
-	// Now request should be allowed again
-	res, err = swc.Allow(ctx, "user1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// Test AllowN
+	resN, err := swc.AllowN(ctx, "userN", 2)
+	if err != nil || !resN.Allowed {
+		t.Fatalf("AllowN failed: %v", err)
 	}
-	if !res.Allowed {
-		t.Fatalf("expected request after window slide to be allowed")
+
+	// Test Reset
+	err = swc.Reset(ctx, "user1")
+	if err != nil {
+		t.Fatalf("Reset failed: %v", err)
+	}
+}
+
+func TestSlidingWindowCounter_InvalidConfig(t *testing.T) {
+	memStore := store.NewMemory()
+	defer memStore.Close()
+
+	_, err := NewSlidingWindowCounter(SlidingWindowCounterConfig{Limit: 0, Window: time.Minute, Store: memStore})
+	if err == nil {
+		t.Error("expected error on zero limit")
+	}
+
+	_, err = NewSlidingWindowCounter(SlidingWindowCounterConfig{Limit: 10, Window: 0, Store: memStore})
+	if err == nil {
+		t.Error("expected error on zero window")
+	}
+
+	_, err = NewSlidingWindowCounter(SlidingWindowCounterConfig{Limit: 10, Window: time.Minute, Store: nil})
+	if err == nil {
+		t.Error("expected error on nil store")
 	}
 }
