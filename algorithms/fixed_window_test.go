@@ -154,7 +154,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	// Use unique key to avoid any caching issues
 	key := "test-user-window-reset"
 
@@ -180,7 +180,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 
 	// Use a new key to ensure clean state in new window
 	key2 := "test-user-window-reset-2"
-	
+
 	// Should be allowed in new window
 	result, err = limiter.Allow(ctx, key2)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 	if !result.Allowed {
 		t.Error("Expected to be allowed in new window with new key")
 	}
-	
+
 	// Also verify the original key works in the new window
 	// The window number should have changed
 	result, err = limiter.Allow(ctx, key)
@@ -340,7 +340,7 @@ func TestFixedWindow_WindowNumber(t *testing.T) {
 	defer memStore.Close()
 
 	windowDuration := 100 * time.Millisecond
-	
+
 	limiter, err := NewFixedWindow(FixedWindowConfig{
 		Limit:  5,
 		Window: windowDuration,

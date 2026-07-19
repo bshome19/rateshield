@@ -7,11 +7,11 @@ import (
 
 func TestKeyByIP(t *testing.T) {
 	tests := []struct {
-		name           string
-		remoteAddr     string
-		xForwardedFor  string
-		xRealIP        string
-		expectedKey    string
+		name          string
+		remoteAddr    string
+		xForwardedFor string
+		xRealIP       string
+		expectedKey   string
 	}{
 		{
 			name:        "simple remote addr",

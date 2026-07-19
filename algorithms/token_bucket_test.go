@@ -346,9 +346,9 @@ func TestTokenBucket_Concurrent(t *testing.T) {
 	// The important thing is that the limiter doesn't crash and provides reasonable limiting
 	// In a production environment with Redis, atomic operations would ensure exact limits
 	totalRequests := int64(numGoroutines * requestsPerGoroutine)
-	
+
 	t.Logf("Allowed %d out of %d requests (capacity: %d)", allowedCount, totalRequests, capacity)
-	
+
 	// We should allow at least the capacity and not more than all requests
 	if allowedCount < capacity {
 		t.Errorf("Expected at least %d allowed requests, got %d", capacity, allowedCount)
