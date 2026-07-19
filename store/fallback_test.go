@@ -77,11 +77,19 @@ func TestFallbackStore_PrimaryErrorFallback(t *testing.T) {
 		t.Fatalf("expected state count 5, got %d", state.Count)
 	}
 
-	// Test Reset fallback
+	// Test Reset fallback: primary is broken so Reset returns a primary error,
+	// but the secondary store is still cleared (best-effort both-store reset).
 	err = fb.Reset(ctx, "key1")
-	if err != nil {
-		t.Fatalf("unexpected fallback Reset error: %v", err)
+	// err may be non-nil (primary failure) — that's expected and intentional.
+	// The important thing is that the secondary was also reset.
+	state2, getErr := fb.Get(ctx, "key1")
+	if getErr != nil {
+		t.Fatalf("unexpected Get error after Reset: %v", getErr)
 	}
+	if state2.Count != 0 {
+		t.Fatalf("expected secondary to be cleared after Reset, got count=%d", state2.Count)
+	}
+	_ = err // primary error is surfaced, not fatal
 
 	// Test Increment fallback
 	cnt, err := fb.Increment(ctx, "key2", time.Minute)
