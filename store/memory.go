@@ -205,8 +205,13 @@ func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64,
 		}
 	}
 
-	resetSecs := float64(capacity) / rate
-	resetAt := now.Add(time.Duration(resetSecs * float64(time.Second)))
+	var resetAt time.Time
+	if rate <= 0 {
+		resetAt = now.Add(ttl)
+	} else {
+		resetSecs := float64(capacity) / rate
+		resetAt = now.Add(time.Duration(resetSecs * float64(time.Second)))
+	}
 
 	return &EvalResult{
 		Allowed:    allowed,
@@ -411,7 +416,7 @@ func (m *Memory) AllowSlidingWindowLog(ctx context.Context, key string, limit in
 }
 
 func (m *Memory) cleanup() {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {

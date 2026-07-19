@@ -74,14 +74,19 @@ func (fs *FallbackStore) Increment(ctx context.Context, key string, ttl time.Dur
 }
 
 func (fs *FallbackStore) Reset(ctx context.Context, key string) error {
+	var firstErr error
 	if fs.primary != nil {
-		err := fs.primary.Reset(ctx, key)
-		if err == nil {
-			return nil
+		if err := fs.primary.Reset(ctx, key); err != nil {
+			fs.handlePrimaryError(err)
+			firstErr = err
 		}
-		fs.handlePrimaryError(err)
 	}
-	return fs.secondary.Reset(ctx, key)
+	// Always reset secondary too — prevents stale counters surviving a Redis
+	// outage+recovery cycle where the secondary accumulated state during the outage.
+	if err := fs.secondary.Reset(ctx, key); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
 }
 
 func (fs *FallbackStore) AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (*EvalResult, error) {

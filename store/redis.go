@@ -80,12 +80,15 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 		if remaining < 0 then remaining = 0 end
 
 		local retry_after_ms = 0
-		if allowed == 0 then
+		if allowed == 0 and rate > 0 then
 			local needed = requested - current_tokens
 			retry_after_ms = math.ceil((needed / rate) * 1000)
 		end
 
-		local reset_after_ms = math.ceil((capacity / rate) * 1000)
+		local reset_after_ms = 0
+		if rate > 0 then
+			reset_after_ms = math.ceil((capacity / rate) * 1000)
+		end
 
 		return {allowed, remaining, reset_after_ms, retry_after_ms}
 	`)
