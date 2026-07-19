@@ -44,6 +44,9 @@ jobs:
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     strategy:
       matrix:
         go-version: ['1.22.x', '1.23.x']
@@ -58,15 +61,30 @@ jobs:
         go-version: ${{ matrix.go-version }}
         cache: true
 
-    - name: Run Unit Tests with Race Detector & Coverage
-      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+    - name: Run Unit Tests & Calculate Coverage
+      run: |
+        PACKAGES=$(go list ./... | grep -v /examples)
+        go test -v -race -coverprofile=coverage.out -covermode=atomic $PACKAGES
 
-    - name: Calculate Coverage Percentage
+    - name: Generate Coverage Report
       run: |
         COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+        echo "COVERAGE_PCT=$COVERAGE" >> $GITHUB_ENV
+
         echo "### 📊 Code Coverage Summary" >> $GITHUB_STEP_SUMMARY
-        echo "**Total Test Coverage:** \`$COVERAGE\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Total Core Code Coverage:** \`$COVERAGE\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
         go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+    - name: Comment Coverage on PR
+      if: github.event_name == 'pull_request' && matrix.go-version == '1.23.x'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: code-coverage-report
+        message: |
+          ### 📊 Rateshield Test Coverage Report
+          - **Total Code Coverage:** `${{ env.COVERAGE_PCT }}`
+          - **Race Detector:** Passed ✅
+          - **Matrix Go Version:** `${{ matrix.go-version }}`

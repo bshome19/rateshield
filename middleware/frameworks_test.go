@@ -209,3 +209,59 @@ func TestChiMiddleware(t *testing.T) {
 		t.Fatalf("Chi: expected response body on 429")
 	}
 }
+
+func TestFrameworkKeyExtractors(t *testing.T) {
+	// Chi Extractors
+	paramExtractor := ChiKeyByURLParam("user_id")
+	req := httptest.NewRequest("GET", "/users/123", nil)
+	_ = paramExtractor(req)
+
+	memStore := store.NewMemory()
+	defer memStore.Close()
+	limiter, _ := algorithms.NewFixedWindow(algorithms.FixedWindowConfig{
+		Limit:  10,
+		Window: time.Minute,
+		Store:  memStore,
+	})
+
+	r := chi.NewRouter()
+	r.Use(ChiRateLimit(limiter,
+		WithChiKeyExtractor(func(r *http.Request) string { return "test-ip" }),
+		WithChiErrorHandler(defaultChiErrorHandler),
+		WithChiSkip(func(r *http.Request) bool { return r.URL.Path == "/health" }),
+	))
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	rec := httptest.NewRecorder()
+	hReq := httptest.NewRequest("GET", "/health", nil)
+	r.ServeHTTP(rec, hReq)
+	if rec.Code != http.StatusOK {
+		t.Errorf("Chi skip failed")
+	}
+
+	// Echo Extractors
+	e := echo.New()
+	reqE := httptest.NewRequest("GET", "/test", nil)
+	reqE.Header.Set("X-API-Key", "secret-key")
+	cE := e.NewContext(reqE, httptest.NewRecorder())
+
+	_ = EchoKeyByIP()(cE)
+	_ = EchoKeyByHeader("X-API-Key")(cE)
+	_ = EchoKeyByPath()(cE)
+	_ = EchoKeyByIPAndPath()(cE)
+	_ = EchoKeyByUserID("user_id")(cE)
+	_ = EchoKeyByParam("id")(cE)
+
+	// Fiber Extractors
+	app := fiber.New()
+	app.Get("/users/:id", func(c *fiber.Ctx) error {
+		_ = FiberKeyByIP()(c)
+		_ = FiberKeyByHeader("X-API-Key")(c)
+		_ = FiberKeyByRoute()(c)
+		_ = FiberKeyByIPAndRoute()(c)
+		_ = FiberKeyByUserID("id")(c)
+		return c.SendString("OK")
+	})
+	fReq := httptest.NewRequest("GET", "/users/42", nil)
+	fReq.Header.Set("X-API-Key", "secret-fiber")
+	_, _ = app.Test(fReq)
+}

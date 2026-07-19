@@ -82,4 +82,28 @@ func TestFallbackStore_PrimaryErrorFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected fallback Reset error: %v", err)
 	}
+
+	// Test Increment fallback
+	cnt, err := fb.Increment(ctx, "key2", time.Minute)
+	if err != nil || cnt != 1 {
+		t.Fatalf("unexpected fallback Increment result: cnt=%d, err=%v", cnt, err)
+	}
+
+	// Test AllowFixedWindow fallback
+	fwRes, err := fb.AllowFixedWindow(ctx, "fw_key", 5, time.Minute, 1, time.Minute)
+	if err != nil || !fwRes.Allowed {
+		t.Fatalf("unexpected fallback AllowFixedWindow: %v", err)
+	}
+
+	// Test AllowSlidingWindowCounter fallback
+	swcRes, err := fb.AllowSlidingWindowCounter(ctx, "swc_key", 5, time.Minute, 1, time.Minute)
+	if err != nil || !swcRes.Allowed {
+		t.Fatalf("unexpected fallback AllowSlidingWindowCounter: %v", err)
+	}
+
+	// Test AllowSlidingWindowLog fallback
+	swlRes, err := fb.AllowSlidingWindowLog(ctx, "swl_key", 5, time.Minute, 1, time.Minute)
+	if err != nil || !swlRes.Allowed {
+		t.Fatalf("unexpected fallback AllowSlidingWindowLog: %v", err)
+	}
 }

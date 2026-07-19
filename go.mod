@@ -3,6 +3,7 @@ module github.com/bshome19/rateshield
 go 1.24.0
 
 require (
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/redis/go-redis/v9 v9.17.3
 )
@@ -40,6 +41,7 @@ require (
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/net v0.48.0 // indirect

@@ -446,3 +446,52 @@ func TestMemory_EmptyRequests(t *testing.T) {
 		t.Errorf("Expected tokens 5, got %f", retrieved.Tokens)
 	}
 }
+
+func TestMemory_AtomicAlgorithms(t *testing.T) {
+	m := NewMemory()
+	defer m.Close()
+
+	ctx := context.Background()
+	now := time.Now()
+
+	// Token Bucket
+	tbRes, err := m.AllowTokenBucket(ctx, "tb_key", 10.0, 5, 1, time.Minute)
+	if err != nil || !tbRes.Allowed {
+		t.Errorf("Memory AllowTokenBucket failed: %v", err)
+	}
+
+	// Fixed Window
+	fwRes, err := m.AllowFixedWindow(ctx, "fw_key", 5, time.Minute, 1, time.Minute)
+	if err != nil || !fwRes.Allowed {
+		t.Errorf("Memory AllowFixedWindow failed: %v", err)
+	}
+
+	// Sliding Window Counter
+	swcRes, err := m.AllowSlidingWindowCounter(ctx, "swc_key", 5, time.Minute, 1, time.Minute)
+	if err != nil || !swcRes.Allowed {
+		t.Errorf("Memory AllowSlidingWindowCounter failed: %v", err)
+	}
+
+	// Sliding Window Log
+	swlRes, err := m.AllowSlidingWindowLog(ctx, "swl_key", 5, time.Minute, 1, time.Minute)
+	if err != nil || !swlRes.Allowed {
+		t.Errorf("Memory AllowSlidingWindowLog failed: %v", err)
+	}
+
+	// Edge case: n > limit
+	fwExceed, _ := m.AllowFixedWindow(ctx, "fw_exceed", 2, time.Minute, 5, time.Minute)
+	if fwExceed.Allowed {
+		t.Error("Expected fwExceed to be denied")
+	}
+
+	swcExceed, _ := m.AllowSlidingWindowCounter(ctx, "swc_exceed", 2, time.Minute, 5, time.Minute)
+	if swcExceed.Allowed {
+		t.Error("Expected swcExceed to be denied")
+	}
+
+	swlExceed, _ := m.AllowSlidingWindowLog(ctx, "swl_exceed", 2, time.Minute, 5, time.Minute)
+	if swlExceed.Allowed {
+		t.Error("Expected swlExceed to be denied")
+	}
+	_ = now
+}
