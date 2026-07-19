@@ -129,7 +129,7 @@ func TestMemory_GetCopiesData(t *testing.T) {
 		Tokens:   5,
 		Requests: []time.Time{now},
 	}
-	m.Set(ctx, key, state, time.Hour)
+	_ = m.Set(ctx, key, state, time.Hour)
 
 	// Get and modify
 	retrieved, _ := m.Get(ctx, key)
@@ -214,7 +214,7 @@ func TestMemory_Reset(t *testing.T) {
 
 	// Set a value
 	state := &State{Tokens: 10, LastUpdate: time.Now()}
-	m.Set(ctx, key, state, time.Hour)
+	_ = m.Set(ctx, key, state, time.Hour)
 
 	// Verify it exists
 	retrieved, _ := m.Get(ctx, key)
@@ -257,7 +257,7 @@ func TestMemory_TTLExpiry(t *testing.T) {
 
 	// Set with short TTL
 	state := &State{Tokens: 10, LastUpdate: time.Now()}
-	m.Set(ctx, key, state, 50*time.Millisecond)
+	_ = m.Set(ctx, key, state, 50*time.Millisecond)
 
 	// Should exist initially
 	retrieved, _ := m.Get(ctx, key)
@@ -284,14 +284,14 @@ func TestMemory_TTLRefresh(t *testing.T) {
 
 	// Set with short TTL
 	state := &State{Tokens: 10, LastUpdate: time.Now()}
-	m.Set(ctx, key, state, 100*time.Millisecond)
+	_ = m.Set(ctx, key, state, 100*time.Millisecond)
 
 	// Wait a bit
 	time.Sleep(50 * time.Millisecond)
 
 	// Update with new TTL
 	state.Tokens = 20
-	m.Set(ctx, key, state, 100*time.Millisecond)
+	_ = m.Set(ctx, key, state, 100*time.Millisecond)
 
 	// Wait past original expiry
 	time.Sleep(70 * time.Millisecond)
@@ -320,7 +320,7 @@ func TestMemory_ConcurrentIncrement(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			m.Increment(ctx, key, time.Hour)
+			_, _ = m.Increment(ctx, key, time.Hour)
 		}()
 	}
 
@@ -348,7 +348,7 @@ func TestMemory_ConcurrentReadWrite(t *testing.T) {
 			defer wg.Done()
 			key := "key"
 			state := &State{Tokens: float64(id), LastUpdate: time.Now()}
-			m.Set(ctx, key, state, time.Hour)
+			_ = m.Set(ctx, key, state, time.Hour)
 		}(i)
 	}
 
@@ -357,7 +357,7 @@ func TestMemory_ConcurrentReadWrite(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			m.Get(ctx, "key")
+			_, _ = m.Get(ctx, "key")
 		}()
 	}
 
@@ -379,8 +379,8 @@ func TestMemory_ConcurrentDifferentKeys(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			key := string(rune('a' + id%26))
-			m.Increment(ctx, key, time.Hour)
-			m.Get(ctx, key)
+			_, _ = m.Increment(ctx, key, time.Hour)
+			_, _ = m.Get(ctx, key)
 		}(i)
 	}
 

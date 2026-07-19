@@ -124,7 +124,7 @@ func TestSlidingWindow_WindowExpiry(t *testing.T) {
 
 	// Exhaust the limit
 	for i := 0; i < 3; i++ {
-		limiter.Allow(ctx, key)
+		_, _ = limiter.Allow(ctx, key)
 	}
 
 	// Should be denied
@@ -200,8 +200,8 @@ func TestSlidingWindow_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
 
 	// Exhaust limit for user1
-	limiter.Allow(ctx, "user1")
-	limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
 	result, _ := limiter.Allow(ctx, "user1")
 	if result.Allowed {
 		t.Error("user1 should be rate limited")
@@ -231,8 +231,8 @@ func TestSlidingWindow_Reset(t *testing.T) {
 	key := "test-user"
 
 	// Exhaust limit
-	limiter.Allow(ctx, key)
-	limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
 	result, _ := limiter.Allow(ctx, key)
 	if result.Allowed {
 		t.Error("Expected to be rate limited")

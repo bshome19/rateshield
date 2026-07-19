@@ -217,8 +217,8 @@ func TestFixedWindow_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
 
 	// Exhaust user1
-	limiter.Allow(ctx, "user1")
-	limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
 	result, _ := limiter.Allow(ctx, "user1")
 	if result.Allowed {
 		t.Error("user1 should be rate limited")
@@ -248,8 +248,8 @@ func TestFixedWindow_Reset(t *testing.T) {
 	key := "test-user"
 
 	// Exhaust limit
-	limiter.Allow(ctx, key)
-	limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
 	result, _ := limiter.Allow(ctx, key)
 	if result.Allowed {
 		t.Error("Expected to be rate limited")
@@ -285,7 +285,7 @@ func TestFixedWindow_RetryAfter(t *testing.T) {
 	key := "test-user"
 
 	// First request
-	limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
 
 	// Second request should be denied with RetryAfter
 	result, _ := limiter.Allow(ctx, key)

@@ -34,7 +34,7 @@ func TestStdlib_AllowedRequest(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	middleware := Stdlib(Config{
@@ -288,7 +288,7 @@ func TestStdlib_CustomErrorHandler(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Custom-Header", "custom-value")
 			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(customError)
+			_ = json.NewEncoder(w).Encode(customError)
 		},
 	})
 
@@ -312,7 +312,7 @@ func TestStdlib_CustomErrorHandler(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&response)
+	_ = json.NewDecoder(rr.Body).Decode(&response)
 
 	if response["custom"] != true {
 		t.Error("Custom error handler not called")
