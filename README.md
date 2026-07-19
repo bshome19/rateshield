@@ -229,6 +229,30 @@ e := echo.New()
 e.Use(middleware.EchoSimple(limiter))
 ```
 
+### Chi
+```go
+import "github.com/bshome19/rateshield/middleware"
+
+r := chi.NewRouter()
+r.Use(middleware.ChiSimple(limiter))
+```
+
+---
+
+## 🔑 Key Extractors & Security
+
+`rateshield` provides flexible key extraction helpers out of the box:
+
+| Key Extractor | Description | Recommended Use Case |
+| :--- | :--- | :--- |
+| `KeyByIP` | Inspects `X-Forwarded-For`, `X-Real-IP`, then `RemoteAddr` | **Behind trusted proxy** (Nginx, Cloudflare, AWS ALB) |
+| `KeyByRealIP` | Reads **only** `RemoteAddr` (TCP socket connection IP) | **Direct internet exposure** (prevents `X-Forwarded-For` IP spoofing) |
+| `KeyByHeader(name)` | Rate limits by HTTP header value (e.g., `X-API-Key`) | API keys, Bearer tokens |
+| `KeyByUserID(header)`| Uses User ID header with fallback to IP | Authenticated user sessions |
+| `KeyByEndpoint` | Rate limits by `METHOD:Path` | Endpoint-level global rate limits |
+
+> 🔒 **Security Tip:** If your Go service is exposed directly to the internet without a reverse proxy, use `KeyByRealIP` to prevent malicious clients from forging `X-Forwarded-For` headers.
+
 ---
 
 ## 📊 Algorithm Comparison
