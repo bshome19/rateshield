@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/bshome19/rateshield"
 	"github.com/labstack/echo/v4"
@@ -64,14 +63,11 @@ func Echo(cfg EchoConfig) echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			// Set rate limit headers
-			c.Response().Header().Set("X-RateLimit-Limit", strconv.FormatInt(result.Limit, 10))
-			c.Response().Header().Set("X-RateLimit-Remaining", strconv.FormatInt(result.Remaining, 10))
-			c.Response().Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt.Unix(), 10))
+			// Set rate limit headers (legacy X-RateLimit-* + modern IETF RateLimit-*)
+			setRateLimitHeaders(c.Response().Writer, result)
 
 			// Check if rate limit exceeded
 			if !result.Allowed {
-				c.Response().Header().Set("Retry-After", strconv.FormatInt(int64(result.RetryAfter.Seconds()), 10))
 				return cfg.ErrorHandler(c, result)
 			}
 

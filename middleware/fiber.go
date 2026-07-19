@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/bshome19/rateshield"
 	"github.com/gofiber/fiber/v2"
@@ -60,10 +61,19 @@ func Fiber(cfg FiberConfig) fiber.Handler {
 			return c.Next()
 		}
 
-		// Set rate limit headers
-		c.Set("X-RateLimit-Limit", strconv.FormatInt(result.Limit, 10))
-		c.Set("X-RateLimit-Remaining", strconv.FormatInt(result.Remaining, 10))
+		// Set rate limit headers (legacy X-RateLimit-* + modern IETF RateLimit-*)
+		limitStr := strconv.FormatInt(result.Limit, 10)
+		remainingStr := strconv.FormatInt(result.Remaining, 10)
+		c.Set("X-RateLimit-Limit", limitStr)
+		c.Set("X-RateLimit-Remaining", remainingStr)
 		c.Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt.Unix(), 10))
+		c.Set("RateLimit-Limit", limitStr)
+		c.Set("RateLimit-Remaining", remainingStr)
+		resetDelta := int64(time.Until(result.ResetAt).Seconds())
+		if resetDelta < 0 {
+			resetDelta = 0
+		}
+		c.Set("RateLimit-Reset", strconv.FormatInt(resetDelta, 10))
 
 		// Check if rate limit exceeded
 		if !result.Allowed {

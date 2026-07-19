@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/bshome19/rateshield"
 	"github.com/gin-gonic/gin"
@@ -56,14 +55,11 @@ func Gin(cfg GinConfig) gin.HandlerFunc {
 			return
 		}
 
-		// Set rate limit headers
-		c.Header("X-RateLimit-Limit", strconv.FormatInt(result.Limit, 10))
-		c.Header("X-RateLimit-Remaining", strconv.FormatInt(result.Remaining, 10))
-		c.Header("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt.Unix(), 10))
+		// Set rate limit headers (legacy X-RateLimit-* + modern IETF RateLimit-*)
+		setRateLimitHeaders(c.Writer, result)
 
 		// Check if rate limit exceeded
 		if !result.Allowed {
-			c.Header("Retry-After", strconv.FormatInt(int64(result.RetryAfter.Seconds()), 10))
 			cfg.ErrorHandler(c, result)
 			c.Abort()
 			return

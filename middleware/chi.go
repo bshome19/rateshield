@@ -58,14 +58,11 @@ func Chi(cfg ChiConfig) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Set rate limit headers
-			w.Header().Set("X-RateLimit-Limit", strconv.FormatInt(result.Limit, 10))
-			w.Header().Set("X-RateLimit-Remaining", strconv.FormatInt(result.Remaining, 10))
-			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt.Unix(), 10))
+			// Set rate limit headers (legacy X-RateLimit-* + modern IETF RateLimit-*)
+			setRateLimitHeaders(w, result)
 
 			// Check if rate limit exceeded
 			if !result.Allowed {
-				w.Header().Set("Retry-After", strconv.FormatInt(int64(result.RetryAfter.Seconds()), 10))
 				cfg.ErrorHandler(w, r, result)
 				return
 			}
