@@ -7,6 +7,40 @@ on:
     branches: [ main ]
 
 jobs:
+  lint:
+    name: Code Quality & Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+
+    - name: Verify Go Module
+      run: go mod verify
+
+    - name: Check Code Formatting (gofmt)
+      run: |
+        if [ -n "$(gofmt -l .)" ]; then
+          echo "The following files are not formatted properly:"
+          gofmt -l .
+          exit 1
+        fi
+
+    - name: Run Vulnerability Check (govulncheck)
+      run: |
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        govulncheck ./...
+
+    - name: Run golangci-lint
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        $(go env GOPATH)/bin/golangci-lint run ./...
+
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
@@ -24,11 +58,15 @@ jobs:
         go-version: ${{ matrix.go-version }}
         cache: true
 
-    - name: Install Dependencies
-      run: go mod download
-
-    - name: Run Tests with Race Detector & Coverage
+    - name: Run Unit Tests with Race Detector & Coverage
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
-    - name: Generate Coverage Report
-      run: go tool cover -func=coverage.out
+    - name: Calculate Coverage Percentage
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+        echo "### 📊 Code Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Total Test Coverage:** \`$COVERAGE\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

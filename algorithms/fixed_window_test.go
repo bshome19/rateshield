@@ -154,7 +154,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	// Use unique key to avoid any caching issues
 	key := "test-user-window-reset"
 
@@ -180,7 +180,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 
 	// Use a new key to ensure clean state in new window
 	key2 := "test-user-window-reset-2"
-	
+
 	// Should be allowed in new window
 	result, err = limiter.Allow(ctx, key2)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 	if !result.Allowed {
 		t.Error("Expected to be allowed in new window with new key")
 	}
-	
+
 	// Also verify the original key works in the new window
 	// The window number should have changed
 	result, err = limiter.Allow(ctx, key)
@@ -217,8 +217,8 @@ func TestFixedWindow_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
 
 	// Exhaust user1
-	limiter.Allow(ctx, "user1")
-	limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
 	result, _ := limiter.Allow(ctx, "user1")
 	if result.Allowed {
 		t.Error("user1 should be rate limited")
@@ -248,8 +248,8 @@ func TestFixedWindow_Reset(t *testing.T) {
 	key := "test-user"
 
 	// Exhaust limit
-	limiter.Allow(ctx, key)
-	limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
 	result, _ := limiter.Allow(ctx, key)
 	if result.Allowed {
 		t.Error("Expected to be rate limited")
@@ -285,7 +285,7 @@ func TestFixedWindow_RetryAfter(t *testing.T) {
 	key := "test-user"
 
 	// First request
-	limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
 
 	// Second request should be denied with RetryAfter
 	result, _ := limiter.Allow(ctx, key)
@@ -340,7 +340,7 @@ func TestFixedWindow_WindowNumber(t *testing.T) {
 	defer memStore.Close()
 
 	windowDuration := 100 * time.Millisecond
-	
+
 	limiter, err := NewFixedWindow(FixedWindowConfig{
 		Limit:  5,
 		Window: windowDuration,

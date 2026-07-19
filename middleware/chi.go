@@ -79,7 +79,7 @@ func Chi(cfg ChiConfig) func(http.Handler) http.Handler {
 func defaultChiErrorHandler(w http.ResponseWriter, r *http.Request, result *rateshield.Result) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusTooManyRequests)
-	w.Write([]byte(`{"error":"rate limit exceeded","retry_after":` +
+	_, _ = w.Write([]byte(`{"error":"rate limit exceeded","retry_after":` +
 		strconv.FormatInt(int64(result.RetryAfter.Seconds()), 10) + `}`))
 }
 

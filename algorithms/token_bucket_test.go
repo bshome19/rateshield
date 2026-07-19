@@ -186,7 +186,7 @@ func TestTokenBucket_TokenRefill(t *testing.T) {
 
 	// Exhaust all tokens
 	for i := 0; i < 5; i++ {
-		limiter.Allow(ctx, key)
+		_, _ = limiter.Allow(ctx, key)
 	}
 
 	// Verify bucket is empty
@@ -224,8 +224,8 @@ func TestTokenBucket_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
 
 	// Exhaust tokens for user1
-	limiter.Allow(ctx, "user1")
-	limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
+	_, _ = limiter.Allow(ctx, "user1")
 	result, _ := limiter.Allow(ctx, "user1")
 	if result.Allowed {
 		t.Error("user1 should be rate limited")
@@ -255,8 +255,8 @@ func TestTokenBucket_Reset(t *testing.T) {
 	key := "test-user"
 
 	// Exhaust tokens
-	limiter.Allow(ctx, key)
-	limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
+	_, _ = limiter.Allow(ctx, key)
 	result, _ := limiter.Allow(ctx, key)
 	if result.Allowed {
 		t.Error("Expected to be rate limited")
@@ -346,9 +346,9 @@ func TestTokenBucket_Concurrent(t *testing.T) {
 	// The important thing is that the limiter doesn't crash and provides reasonable limiting
 	// In a production environment with Redis, atomic operations would ensure exact limits
 	totalRequests := int64(numGoroutines * requestsPerGoroutine)
-	
+
 	t.Logf("Allowed %d out of %d requests (capacity: %d)", allowedCount, totalRequests, capacity)
-	
+
 	// We should allow at least the capacity and not more than all requests
 	if allowedCount < capacity {
 		t.Errorf("Expected at least %d allowed requests, got %d", capacity, allowedCount)
