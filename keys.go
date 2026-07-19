@@ -71,3 +71,14 @@ func KeyByUserAndEndpoint(userHeader string) KeyExtractor {
 		return userID + ":" + r.Method + ":" + r.URL.Path
 	}
 }
+
+// KeyByRealIP extracts the rate limit key from the direct TCP connection IP (RemoteAddr).
+// Use this when your reverse proxy is NOT configured to strip/rewrite X-Forwarded-For,
+// or when you want to rate-limit by the actual connecting network address to prevent IP spoofing.
+func KeyByRealIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
