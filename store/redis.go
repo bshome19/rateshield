@@ -188,7 +188,8 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 		if (count + requested) <= limit then
 			allowed = 1
 			for i = 1, requested do
-				redis.call('ZADD', logKey, now, now .. '-' .. i .. '-' .. math.random(1000000))
+				local seq = redis.call('INCR', logKey .. ':seq')
+				redis.call('ZADD', logKey, now, now .. '-' .. i .. '-' .. seq)
 			end
 			redis.call('PEXPIRE', logKey, ttlMs)
 			count = count + requested

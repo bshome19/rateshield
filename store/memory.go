@@ -194,10 +194,14 @@ func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64,
 
 	var retryAfter time.Duration
 	if !allowed {
-		tokensNeeded := float64(n) - e.tokens
-		retryAfter = time.Duration((tokensNeeded / rate) * float64(time.Second))
-		if retryAfter < 0 {
-			retryAfter = 0
+		if rate <= 0 {
+			retryAfter = ttl
+		} else {
+			tokensNeeded := float64(n) - e.tokens
+			retryAfter = time.Duration((tokensNeeded / rate) * float64(time.Second))
+			if retryAfter < 0 {
+				retryAfter = 0
+			}
 		}
 	}
 
