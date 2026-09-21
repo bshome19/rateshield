@@ -28,8 +28,9 @@ type Memory struct {
 }
 
 type shard struct {
-	mu   sync.RWMutex
+	mu   sync.Mutex
 	data map[string]*memEntry
+	_    [48]byte // Cache line padding: Mutex(8) + map-ptr(8) = 16 bytes; 64 - 16 = 48 to fill cache line
 }
 
 type memEntry struct {
@@ -59,15 +60,15 @@ func NewMemory() *Memory {
 }
 
 func (m *Memory) getShard(key string) *shard {
-	idx := fnv1a(key) % numShards
+	idx := fnv1a(key) & (numShards - 1)
 	return m.shards[idx]
 }
 
 // Get retrieves the state for a key.
 func (m *Memory) Get(ctx context.Context, key string) (*State, error) {
 	s := m.getShard(key)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if e, ok := s.data[key]; ok {
 		if time.Now().Before(e.expiresAt) {
@@ -154,8 +155,10 @@ func (m *Memory) Close() error {
 	return nil
 }
 
-// AllowTokenBucket performs an atomic token bucket evaluation.
-func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (*EvalResult, error) {
+func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (EvalResult, error) {
+	if err := ctx.Err(); err != nil {
+		return EvalResult{}, err
+	}
 	s := m.getShard(key)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,11 +176,13 @@ func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64,
 		e.lastUpd = now
 	} else {
 		elapsed := now.Sub(e.lastUpd).Seconds()
-		e.tokens += elapsed * rate
-		if e.tokens > float64(capacity) {
-			e.tokens = float64(capacity)
+		if elapsed > 0 {
+			e.tokens += elapsed * rate
+			if e.tokens > float64(capacity) {
+				e.tokens = float64(capacity)
+			}
+			e.lastUpd = now
 		}
-		e.lastUpd = now
 	}
 
 	e.expiresAt = now.Add(ttl)
@@ -209,11 +214,15 @@ func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64,
 	if rate <= 0 {
 		resetAt = now.Add(ttl)
 	} else {
-		resetSecs := float64(capacity) / rate
+		missingTokens := float64(capacity) - e.tokens
+		if missingTokens < 0 {
+			missingTokens = 0
+		}
+		resetSecs := missingTokens / rate
 		resetAt = now.Add(time.Duration(resetSecs * float64(time.Second)))
 	}
 
-	return &EvalResult{
+	return EvalResult{
 		Allowed:    allowed,
 		Remaining:  remaining,
 		ResetAt:    resetAt,
@@ -222,7 +231,10 @@ func (m *Memory) AllowTokenBucket(ctx context.Context, key string, rate float64,
 }
 
 // AllowFixedWindow performs an atomic fixed window evaluation.
-func (m *Memory) AllowFixedWindow(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error) {
+func (m *Memory) AllowFixedWindow(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error) {
+	if err := ctx.Err(); err != nil {
+		return EvalResult{}, err
+	}
 	s := m.getShard(key)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -269,7 +281,7 @@ func (m *Memory) AllowFixedWindow(ctx context.Context, key string, limit int64, 
 		}
 	}
 
-	return &EvalResult{
+	return EvalResult{
 		Allowed:    allowed,
 		Remaining:  remaining,
 		ResetAt:    windowEnd,
@@ -278,7 +290,10 @@ func (m *Memory) AllowFixedWindow(ctx context.Context, key string, limit int64, 
 }
 
 // AllowSlidingWindowCounter performs an atomic sliding window counter evaluation (Cloudflare style).
-func (m *Memory) AllowSlidingWindowCounter(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error) {
+func (m *Memory) AllowSlidingWindowCounter(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error) {
+	if err := ctx.Err(); err != nil {
+		return EvalResult{}, err
+	}
 	s := m.getShard(key)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -340,7 +355,7 @@ func (m *Memory) AllowSlidingWindowCounter(ctx context.Context, key string, limi
 		}
 	}
 
-	return &EvalResult{
+	return EvalResult{
 		Allowed:    allowed,
 		Remaining:  remaining,
 		ResetAt:    windowEnd,
@@ -349,7 +364,10 @@ func (m *Memory) AllowSlidingWindowCounter(ctx context.Context, key string, limi
 }
 
 // AllowSlidingWindowLog performs an atomic sliding window log evaluation.
-func (m *Memory) AllowSlidingWindowLog(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error) {
+func (m *Memory) AllowSlidingWindowLog(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error) {
+	if err := ctx.Err(); err != nil {
+		return EvalResult{}, err
+	}
 	s := m.getShard(key)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -368,17 +386,18 @@ func (m *Memory) AllowSlidingWindowLog(ctx context.Context, key string, limit in
 
 	e.expiresAt = now.Add(ttl)
 
-	// Filter out expired timestamps in-place
-	validCount := 0
-	for _, reqTime := range e.requests {
-		if reqTime.After(windowStart) {
-			e.requests[validCount] = reqTime
-			validCount++
-		}
+	// Since timestamps are added in chronological order, find first unexpired index
+	cutoff := 0
+	for cutoff < len(e.requests) && !e.requests[cutoff].After(windowStart) {
+		cutoff++
 	}
-	e.requests = e.requests[:validCount]
+	if cutoff > 0 {
+		// Re-slice to remove expired timestamps
+		copy(e.requests, e.requests[cutoff:])
+		e.requests = e.requests[:len(e.requests)-cutoff]
+	}
 
-	currentCount := int64(validCount)
+	currentCount := int64(len(e.requests))
 	allowed := (currentCount + n) <= limit
 
 	if allowed {
@@ -396,18 +415,26 @@ func (m *Memory) AllowSlidingWindowLog(ctx context.Context, key string, limit in
 	var resetAt time.Time
 	var retryAfter time.Duration
 	if len(e.requests) > 0 {
-		resetAt = e.requests[0].Add(window)
+		resetAt = e.requests[len(e.requests)-1].Add(window)
 		if !allowed {
-			retryAfter = resetAt.Sub(now)
+			neededToExpire := int((currentCount + n) - limit)
+			if neededToExpire <= 0 {
+				neededToExpire = 1
+			}
+			if neededToExpire <= len(e.requests) {
+				retryAfter = e.requests[neededToExpire-1].Add(window).Sub(now)
+			} else {
+				retryAfter = window
+			}
 			if retryAfter < 0 {
 				retryAfter = 0
 			}
 		}
 	} else {
-		resetAt = now.Add(window)
+		resetAt = now
 	}
 
-	return &EvalResult{
+	return EvalResult{
 		Allowed:    allowed,
 		Remaining:  remaining,
 		ResetAt:    resetAt,

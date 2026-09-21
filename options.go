@@ -51,9 +51,6 @@ type Options struct {
 
 	// FailStrategy determines behavior on store error (default: FailOpen).
 	FailStrategy FailStrategy
-
-	// Metrics holds an optional metrics collector callback interface.
-	Metrics MetricsCollector
 }
 
 // Option is a function that configures Options.
@@ -122,13 +119,6 @@ func WithFailStrategy(strategy FailStrategy) Option {
 	}
 }
 
-// WithMetrics sets the metrics collector instance.
-func WithMetrics(m MetricsCollector) Option {
-	return func(o *Options) {
-		o.Metrics = m
-	}
-}
-
 // DefaultOptions returns the default options.
 func DefaultOptions() *Options {
 	return &Options{
@@ -146,5 +136,50 @@ func DefaultOptions() *Options {
 func (o *Options) Apply(opts ...Option) {
 	for _, opt := range opts {
 		opt(o)
+	}
+}
+
+// New creates a new Limiter configured with the provided functional options.
+// If no storage backend is specified via WithStore, a high-performance in-memory store is created automatically.
+func New(opts ...Option) (Limiter, error) {
+	o := DefaultOptions()
+	o.Apply(opts...)
+
+	s := o.Store
+	if s == nil {
+		s = store.NewMemory()
+	}
+
+	switch o.Algorithm {
+	case TokenBucketAlgorithm:
+		return NewTokenBucket(TokenBucketConfig{
+			Rate:     o.Rate,
+			Capacity: o.Capacity,
+			Store:    s,
+			TTL:      o.TTL,
+		})
+	case FixedWindowAlgorithm:
+		return NewFixedWindow(FixedWindowConfig{
+			Limit:  o.Limit,
+			Window: o.Window,
+			Store:  s,
+			TTL:    o.TTL,
+		})
+	case SlidingWindowAlgorithm:
+		return NewSlidingWindow(SlidingWindowConfig{
+			Limit:  o.Limit,
+			Window: o.Window,
+			Store:  s,
+			TTL:    o.TTL,
+		})
+	case SlidingWindowCounterAlgorithm:
+		return NewSlidingWindowCounter(SlidingWindowCounterConfig{
+			Limit:  o.Limit,
+			Window: o.Window,
+			Store:  s,
+			TTL:    o.TTL,
+		})
+	default:
+		return nil, ErrInvalidConfig
 	}
 }

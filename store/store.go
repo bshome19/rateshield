@@ -34,6 +34,31 @@ type EvalResult struct {
 
 // Store is the interface for rate limit state storage.
 type Store interface {
+	// Reset removes the state for a key.
+	Reset(ctx context.Context, key string) error
+
+	// AllowTokenBucket performs an atomic token bucket evaluation.
+	AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (EvalResult, error)
+
+	// AllowFixedWindow performs an atomic fixed window evaluation.
+	AllowFixedWindow(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error)
+
+	// AllowSlidingWindowCounter performs an atomic sliding window counter evaluation.
+	AllowSlidingWindowCounter(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error)
+
+	// AllowSlidingWindowLog performs an atomic sliding window log evaluation.
+	AllowSlidingWindowLog(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error)
+
+	// Close releases any resources associated with the store.
+	Close() error
+}
+
+// LegacyStore extends Store with low-level Get/Set/Increment methods.
+// These methods are not used by the built-in algorithms, but are available
+// for users who need direct state manipulation.
+type LegacyStore interface {
+	Store
+
 	// Get retrieves the current state for a key.
 	Get(ctx context.Context, key string) (*State, error)
 
@@ -42,19 +67,4 @@ type Store interface {
 
 	// Increment atomically increments the count for a key.
 	Increment(ctx context.Context, key string, ttl time.Duration) (int64, error)
-
-	// Reset removes the state for a key.
-	Reset(ctx context.Context, key string) error
-
-	// AllowTokenBucket performs an atomic token bucket evaluation.
-	AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (*EvalResult, error)
-
-	// AllowFixedWindow performs an atomic fixed window evaluation.
-	AllowFixedWindow(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error)
-
-	// AllowSlidingWindowCounter performs an atomic sliding window counter evaluation.
-	AllowSlidingWindowCounter(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error)
-
-	// AllowSlidingWindowLog performs an atomic sliding window log evaluation.
-	AllowSlidingWindowLog(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error)
 }

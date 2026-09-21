@@ -19,6 +19,9 @@ type GinConfig struct {
 	// ErrorHandler is called when rate limit is exceeded.
 	ErrorHandler func(c *gin.Context, result *rateshield.Result)
 
+	// FailStrategy determines behavior when limiter store fails (default: FailOpen).
+	FailStrategy rateshield.FailStrategy
+
 	// Skip is a function to determine if rate limiting should be skipped.
 	Skip func(c *gin.Context) bool
 }
@@ -50,7 +53,10 @@ func Gin(cfg GinConfig) gin.HandlerFunc {
 		// Check rate limit
 		result, err := cfg.Limiter.Allow(c.Request.Context(), key)
 		if err != nil {
-			// On error, allow the request (fail open)
+			if cfg.FailStrategy == rateshield.FailClosed {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "rate limit store error"})
+				return
+			}
 			c.Next()
 			return
 		}

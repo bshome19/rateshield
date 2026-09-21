@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/bshome19/rateshield"
+	"github.com/go-chi/chi/v5"
 )
 
 // ChiConfig holds the configuration for Chi rate limiting middleware.
@@ -18,6 +19,9 @@ type ChiConfig struct {
 
 	// ErrorHandler is called when rate limit is exceeded.
 	ErrorHandler func(w http.ResponseWriter, r *http.Request, result *rateshield.Result)
+
+	// FailStrategy determines behavior when limiter store fails (default: FailOpen).
+	FailStrategy rateshield.FailStrategy
 
 	// Skip is a function to determine if rate limiting should be skipped.
 	Skip func(r *http.Request) bool
@@ -53,7 +57,10 @@ func Chi(cfg ChiConfig) func(http.Handler) http.Handler {
 			// Check rate limit
 			result, err := cfg.Limiter.Allow(r.Context(), key)
 			if err != nil {
-				// On error, allow the request (fail open)
+				if cfg.FailStrategy == rateshield.FailClosed {
+					http.Error(w, "rate limit store error", http.StatusInternalServerError)
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -87,13 +94,14 @@ func ChiSimple(limiter rateshield.Limiter) func(http.Handler) http.Handler {
 	})
 }
 
-// ChiKeyByURLParam returns a key extractor that uses a URL parameter.
-// Note: This requires chi's URLParam function to be used within the handler.
+// ChiKeyByURLParam returns a key extractor that uses a Chi URL route parameter.
 func ChiKeyByURLParam(param string) rateshield.KeyExtractor {
 	return func(r *http.Request) string {
-		// Chi stores URL params in the request context
-		// This is a simplified version - in real usage you'd use chi.URLParam
-		return r.URL.Query().Get(param)
+		val := chi.URLParam(r, param)
+		if val == "" {
+			return r.URL.Query().Get(param)
+		}
+		return val
 	}
 }
 

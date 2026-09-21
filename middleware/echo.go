@@ -19,6 +19,9 @@ type EchoConfig struct {
 	// ErrorHandler is called when rate limit is exceeded.
 	ErrorHandler func(c echo.Context, result *rateshield.Result) error
 
+	// FailStrategy determines behavior when limiter store fails (default: FailOpen).
+	FailStrategy rateshield.FailStrategy
+
 	// Skip is a function to determine if rate limiting should be skipped.
 	Skip func(c echo.Context) bool
 
@@ -59,7 +62,9 @@ func Echo(cfg EchoConfig) echo.MiddlewareFunc {
 			// Check rate limit
 			result, err := cfg.Limiter.Allow(c.Request().Context(), key)
 			if err != nil {
-				// On error, allow the request (fail open)
+				if cfg.FailStrategy == rateshield.FailClosed {
+					return c.String(http.StatusInternalServerError, "rate limit store error")
+				}
 				return next(c)
 			}
 

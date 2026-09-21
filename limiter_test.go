@@ -123,6 +123,10 @@ func (m *mockLimiter) Reset(ctx context.Context, key string) error {
 	return m.resetErr
 }
 
+func (m *mockLimiter) Close() error {
+	return nil
+}
+
 func TestLimiterInterface(t *testing.T) {
 	// Verify mockLimiter implements Limiter interface
 	var _ Limiter = (*mockLimiter)(nil)

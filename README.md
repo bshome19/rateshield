@@ -2,7 +2,7 @@
 
 A high-performance, distributed, zero-allocation rate limiting library for Go.
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/bshome19/rateshield.svg)](https://pkg.go.dev/github.com/bshome19/rateshield)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bshome19/rateshield)](https://goreportcard.com/report/github.com/bshome19/rateshield)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -29,12 +29,23 @@ A high-performance, distributed, zero-allocation rate limiting library for Go.
 
 Tested on **12th Gen Intel(R) Core(TM) i5-12450H** (`go test -bench=. -benchmem ./algorithms`):
 
-| Algorithm | ns/op | Memory (B/op) | Allocations | Complexity |
+### Zero-Allocation High-Throughput Engine (`AllowFast` / `AllowNFast`)
+| Benchmark | Execution Speed | Memory (B/op) | Allocations | Complexity |
 | :--- | :---: | :---: | :---: | :---: |
-| **Token Bucket** | **34.84 ns** | **0 B/op** | **0 allocs** | $O(1)$ |
-| **Fixed Window** | **35.61 ns** | **0 B/op** | **0 allocs** | $O(1)$ |
-| **Sliding Window Counter** | **38.16 ns** | **0 B/op** | **0 allocs** | $O(1)$ |
-| **Sliding Window Log** | **175.70 ns** | **48 B/op** | **1 alloc** | $O(N)$ |
+| **Token Bucket (Multi-Key Sharded)** | **~36 ns/op** | **0 B/op** | **0 allocs/op** | $O(1)$ |
+| **Token Bucket (Single-Key Contended)** | **~407 ns/op** | **0 B/op** | **0 allocs/op** | $O(1)$ |
+| **Fixed Window (Single-Key)** | **~320 ns/op** | **0 B/op** | **0 allocs/op** | $O(1)$ |
+| **Sliding Window Counter (Single-Key)** | **~360 ns/op** | **0 B/op** | **0 allocs/op** | $O(1)$ |
+| **Sliding Window Log (Single-Key)** | **~1,986 ns/op** | **64 B/op** | **1 alloc/op** | $O(\log N)$ |
+
+### Standard Pointer API (`Allow` / `AllowN`)
+| Benchmark | Execution Speed | Memory (B/op) | Allocations | Complexity |
+| :--- | :---: | :---: | :---: | :---: |
+| **Token Bucket** | **~574 ns/op** | **64 B/op** | **1 alloc/op** | $O(1)$ |
+| **Fixed Window** | **~339 ns/op** | **64 B/op** | **1 alloc/op** | $O(1)$ |
+| **Sliding Window Counter** | **~420 ns/op** | **64 B/op** | **1 alloc/op** | $O(1)$ |
+
+> **Note:** Benchmark numbers vary by ±20% across runs depending on system load and thermal conditions. Multi-key sharded benchmarks show best-case throughput where requests distribute across independent lock domains.
 
 ---
 
@@ -81,7 +92,7 @@ Tested on **12th Gen Intel(R) Core(TM) i5-12450H** (`go test -bench=. -benchmem 
 go get github.com/bshome19/rateshield
 ```
 
-**Requirements:** Go 1.22 or higher.
+**Requirements:** Go 1.24 or higher.
 
 ---
 

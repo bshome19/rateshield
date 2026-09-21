@@ -23,7 +23,6 @@ func TestOptions_Apply(t *testing.T) {
 		WithTTL(10*time.Minute),
 		WithFailStrategy(FailClosed),
 		WithKeyExtractor(func(r *http.Request) string { return "custom" }),
-		WithMetrics(nil),
 	)
 
 	if opts.Algorithm != SlidingWindowCounterAlgorithm {
@@ -49,5 +48,80 @@ func TestOptions_Apply(t *testing.T) {
 	}
 	if opts.FailStrategy != FailClosed {
 		t.Errorf("expected FailClosed strategy")
+	}
+}
+
+func TestNew_Algorithms(t *testing.T) {
+	ctx := t.Context()
+
+	// 1. Token Bucket
+	tb, err := New(
+		WithAlgorithm(TokenBucketAlgorithm),
+		WithRate(10),
+		WithCapacity(20),
+	)
+	if err != nil {
+		t.Fatalf("failed to create TokenBucket: %v", err)
+	}
+	defer tb.Close()
+
+	res, err := tb.Allow(ctx, "user1")
+	if err != nil || !res.Allowed {
+		t.Fatalf("TokenBucket Allow failed: %v", err)
+	}
+
+	// 2. Fixed Window
+	fw, err := New(
+		WithAlgorithm(FixedWindowAlgorithm),
+		WithLimit(100),
+		WithWindow(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("failed to create FixedWindow: %v", err)
+	}
+	defer fw.Close()
+
+	res, err = fw.Allow(ctx, "user1")
+	if err != nil || !res.Allowed {
+		t.Fatalf("FixedWindow Allow failed: %v", err)
+	}
+
+	// 3. Sliding Window Counter
+	swc, err := New(
+		WithAlgorithm(SlidingWindowCounterAlgorithm),
+		WithLimit(100),
+		WithWindow(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("failed to create SlidingWindowCounter: %v", err)
+	}
+	defer swc.Close()
+
+	res, err = swc.Allow(ctx, "user1")
+	if err != nil || !res.Allowed {
+		t.Fatalf("SlidingWindowCounter Allow failed: %v", err)
+	}
+
+	// 4. Sliding Window Log
+	swl, err := New(
+		WithAlgorithm(SlidingWindowAlgorithm),
+		WithLimit(100),
+		WithWindow(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("failed to create SlidingWindow: %v", err)
+	}
+	defer swl.Close()
+
+	res, err = swl.Allow(ctx, "user1")
+	if err != nil || !res.Allowed {
+		t.Fatalf("SlidingWindow Allow failed: %v", err)
+	}
+}
+
+func TestNew_InvalidAlgorithm(t *testing.T) {
+	_, err := New(WithAlgorithm(Algorithm(999)))
+	if err == nil {
+		t.Error("expected error for invalid algorithm")
 	}
 }

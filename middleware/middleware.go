@@ -25,12 +25,6 @@ type Config struct {
 	// FailStrategy determines behavior when limiter store fails (default: FailOpen).
 	FailStrategy rateshield.FailStrategy
 
-	// SkipSuccessfulRequests skips rate limiting for successful responses.
-	SkipSuccessfulRequests bool
-
-	// SkipFailedRequests skips rate limiting for failed responses.
-	SkipFailedRequests bool
-
 	// Skip is a function to determine if rate limiting should be skipped.
 	Skip func(r *http.Request) bool
 }

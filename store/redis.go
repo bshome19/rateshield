@@ -73,7 +73,7 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 			allowed = 1
 		end
 
-		redis.call('HMSET', key, 'tokens', current_tokens, 'last_update', last_update)
+		redis.call('HSET', key, 'tokens', current_tokens, 'last_update', last_update)
 		redis.call('PEXPIRE', key, ttlMs)
 
 		local remaining = math.floor(current_tokens)
@@ -87,7 +87,9 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 
 		local reset_after_ms = 0
 		if rate > 0 then
-			reset_after_ms = math.ceil((capacity / rate) * 1000)
+			local missing_tokens = capacity - current_tokens
+			if missing_tokens < 0 then missing_tokens = 0 end
+			reset_after_ms = math.ceil((missing_tokens / rate) * 1000)
 		end
 
 		return {allowed, remaining, reset_after_ms, retry_after_ms}
@@ -190,11 +192,13 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 		local allowed = 0
 		if (count + requested) <= limit then
 			allowed = 1
+			local seqKey = logKey .. ':seq'
 			for i = 1, requested do
-				local seq = redis.call('INCR', logKey .. ':seq')
+				local seq = redis.call('INCR', seqKey)
 				redis.call('ZADD', logKey, now, now .. '-' .. i .. '-' .. seq)
 			end
 			redis.call('PEXPIRE', logKey, ttlMs)
+			redis.call('PEXPIRE', seqKey, ttlMs)
 			count = count + requested
 		end
 
@@ -203,7 +207,9 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 
 		local retry_after_ms = 0
 		if allowed == 0 then
-			local oldest = redis.call('ZRANGE', logKey, 0, 0, 'WITHSCORES')
+			local needed_to_expire = (count + requested) - limit
+			if needed_to_expire < 1 then needed_to_expire = 1 end
+			local oldest = redis.call('ZRANGE', logKey, needed_to_expire - 1, needed_to_expire - 1, 'WITHSCORES')
 			if #oldest > 1 then
 				local oldestTime = tonumber(oldest[2])
 				retry_after_ms = (oldestTime + windowMs) - now
@@ -213,7 +219,15 @@ func NewRedis(cfg RedisConfig) (*Redis, error) {
 			end
 		end
 
-		return {allowed, remaining, windowMs, retry_after_ms}
+		local reset_after_ms = 0
+		local newest = redis.call('ZRANGE', logKey, -1, -1, 'WITHSCORES')
+		if #newest > 1 then
+			local newestTime = tonumber(newest[2])
+			reset_after_ms = (newestTime + windowMs) - now
+			if reset_after_ms < 0 then reset_after_ms = 0 end
+		end
+
+		return {allowed, remaining, reset_after_ms, retry_after_ms}
 	`)
 
 	return &Redis{
@@ -272,9 +286,32 @@ func (r *Redis) Increment(ctx context.Context, key string, ttl time.Duration) (i
 	return incr.Val(), nil
 }
 
-// Reset removes the state for a key.
+// Reset removes all state for a key, including auxiliary keys created by different algorithms.
 func (r *Redis) Reset(ctx context.Context, key string) error {
-	return r.client.Del(ctx, r.prefix+key).Err()
+	fullKey := r.prefix + key
+	// Collect all possible auxiliary keys used by the different algorithms.
+	keysToDelete := []string{fullKey}
+
+	// Fixed Window auxiliary keys: we don't know the exact window numbers,
+	// so scan for matching patterns.
+	var cursor uint64
+	pattern := fullKey + ":*"
+	for {
+		keys, nextCursor, err := r.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			break
+		}
+		keysToDelete = append(keysToDelete, keys...)
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	if len(keysToDelete) > 0 {
+		return r.client.Del(ctx, keysToDelete...).Err()
+	}
+	return nil
 }
 
 // Close closes the Redis connection.
@@ -282,10 +319,10 @@ func (r *Redis) Close() error {
 	return r.client.Close()
 }
 
-func parseEvalResult(raw interface{}, now time.Time) (*EvalResult, error) {
+func parseEvalResult(raw interface{}, now time.Time) (EvalResult, error) {
 	slice, ok := raw.([]interface{})
 	if !ok || len(slice) < 4 {
-		return nil, fmt.Errorf("invalid redis script result format: %v", raw)
+		return EvalResult{}, fmt.Errorf("invalid redis script result format: %v", raw)
 	}
 
 	allowedInt, ok1 := slice[0].(int64)
@@ -294,10 +331,10 @@ func parseEvalResult(raw interface{}, now time.Time) (*EvalResult, error) {
 	retryMs, ok4 := slice[3].(int64)
 
 	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return nil, fmt.Errorf("invalid types in redis script result: %v", raw)
+		return EvalResult{}, fmt.Errorf("invalid types in redis script result: %v", raw)
 	}
 
-	return &EvalResult{
+	return EvalResult{
 		Allowed:    allowedInt == 1,
 		Remaining:  remaining,
 		ResetAt:    now.Add(time.Duration(resetMs) * time.Millisecond),
@@ -306,56 +343,56 @@ func parseEvalResult(raw interface{}, now time.Time) (*EvalResult, error) {
 }
 
 // AllowTokenBucket performs an atomic token bucket check in Redis using Lua script.
-func (r *Redis) AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (*EvalResult, error) {
+func (r *Redis) AllowTokenBucket(ctx context.Context, key string, rate float64, capacity int64, n int64, ttl time.Duration) (EvalResult, error) {
 	now := time.Now()
 	res, err := r.tbScript.Run(ctx, r.client, []string{r.prefix + key},
 		rate, capacity, now.UnixMilli(), n, ttl.Milliseconds(),
 	).Result()
 
 	if err != nil {
-		return nil, err
+		return EvalResult{}, err
 	}
 
 	return parseEvalResult(res, now)
 }
 
 // AllowFixedWindow performs an atomic fixed window check in Redis using Lua script.
-func (r *Redis) AllowFixedWindow(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error) {
+func (r *Redis) AllowFixedWindow(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error) {
 	now := time.Now()
 	res, err := r.fwScript.Run(ctx, r.client, []string{r.prefix + key},
 		limit, window.Milliseconds(), now.UnixMilli(), n,
 	).Result()
 
 	if err != nil {
-		return nil, err
+		return EvalResult{}, err
 	}
 
 	return parseEvalResult(res, now)
 }
 
 // AllowSlidingWindowCounter performs an atomic sliding window counter check in Redis using Lua script.
-func (r *Redis) AllowSlidingWindowCounter(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error) {
+func (r *Redis) AllowSlidingWindowCounter(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error) {
 	now := time.Now()
 	res, err := r.swcScript.Run(ctx, r.client, []string{r.prefix + key},
 		limit, window.Milliseconds(), now.UnixMilli(), n,
 	).Result()
 
 	if err != nil {
-		return nil, err
+		return EvalResult{}, err
 	}
 
 	return parseEvalResult(res, now)
 }
 
 // AllowSlidingWindowLog performs an atomic sliding window log check in Redis using Lua script.
-func (r *Redis) AllowSlidingWindowLog(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (*EvalResult, error) {
+func (r *Redis) AllowSlidingWindowLog(ctx context.Context, key string, limit int64, window time.Duration, n int64, ttl time.Duration) (EvalResult, error) {
 	now := time.Now()
 	res, err := r.swlScript.Run(ctx, r.client, []string{r.prefix + key},
 		limit, window.Milliseconds(), now.UnixMilli(), n, ttl.Milliseconds(),
 	).Result()
 
 	if err != nil {
-		return nil, err
+		return EvalResult{}, err
 	}
 
 	return parseEvalResult(res, now)

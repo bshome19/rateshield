@@ -20,14 +20,11 @@ type FiberConfig struct {
 	// ErrorHandler is called when rate limit is exceeded.
 	ErrorHandler func(c *fiber.Ctx, result *rateshield.Result) error
 
+	// FailStrategy determines behavior when limiter store fails (default: FailOpen).
+	FailStrategy rateshield.FailStrategy
+
 	// Skip is a function to determine if rate limiting should be skipped.
 	Skip func(c *fiber.Ctx) bool
-
-	// SkipSuccessfulRequests skips counting successful requests.
-	SkipSuccessfulRequests bool
-
-	// SkipFailedRequests skips counting failed requests.
-	SkipFailedRequests bool
 }
 
 // Fiber returns a Fiber middleware for rate limiting.
@@ -55,9 +52,11 @@ func Fiber(cfg FiberConfig) fiber.Handler {
 		}
 
 		// Check rate limit
-		result, err := cfg.Limiter.Allow(c.Context(), key)
+		result, err := cfg.Limiter.Allow(c.UserContext(), key)
 		if err != nil {
-			// On error, allow the request (fail open)
+			if cfg.FailStrategy == rateshield.FailClosed {
+				return c.Status(fiber.StatusInternalServerError).SendString("rate limit store error")
+			}
 			return c.Next()
 		}
 

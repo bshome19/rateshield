@@ -11,6 +11,9 @@
 # Output of go coverage
 *.out
 
+# Profiling data
+*.pprof
+
 # Go workspace
 go.work
 go.work.sum

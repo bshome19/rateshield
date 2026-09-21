@@ -17,13 +17,6 @@ const (
 	FailClosed
 )
 
-// MetricsCollector defines an interface for observing rate limiting events.
-type MetricsCollector interface {
-	OnAllowed(key string)
-	OnBlocked(key string)
-	OnError(key string, err error)
-}
-
 // Result represents the outcome of a rate limit check.
 type Result struct {
 	// Allowed indicates whether the request is permitted.
@@ -52,4 +45,18 @@ type Limiter interface {
 
 	// Reset resets the rate limit for a given key.
 	Reset(ctx context.Context, key string) error
+
+	// Close releases any underlying resources (e.g., store cleanup tickers or connections).
+	Close() error
+}
+
+// FastLimiter is implemented by limiters supporting zero-allocation value returns.
+type FastLimiter interface {
+	Limiter
+
+	// AllowFast checks if a single request is allowed without heap allocations.
+	AllowFast(ctx context.Context, key string) (Result, error)
+
+	// AllowNFast checks if n requests are allowed without heap allocations.
+	AllowNFast(ctx context.Context, key string, n int64) (Result, error)
 }

@@ -1,106 +1,119 @@
 # Rate Limiting Algorithms
 
-rateshield supports three popular rate limiting algorithms. Each has different characteristics and use cases.
-
-## Token Bucket
-
-**Best for:** APIs with bursty traffic patterns
-
-### How it works:
-- Tokens are added to a bucket at a fixed rate
-- Each request consumes one token
-- Requests are allowed if tokens are available
-- Bucket has a maximum capacity (burst size)
-
-### Configuration:
-```go
-limiter, err := algorithms.NewTokenBucket(algorithms.TokenBucketConfig{
-    Rate:     10,    // 10 tokens per second
-    Capacity: 20,    // Max 20 tokens (burst)
-    Store:    store,
-})
-```
-
-### Pros:
-- Allows controlled bursts
-- Smooth rate limiting
-- Memory efficient
-
-### Cons:
-- More complex to understand
-- Burst can cause issues if too large
+`rateshield` provides four high-performance rate limiting algorithms, each optimized for different traffic characteristics and precision requirements.
 
 ---
 
-## Sliding Window
+## 1. Token Bucket
 
-**Best for:** Precise rate limiting, API quotas
+**Best for:** APIs with bursty traffic patterns, public endpoints.
 
 ### How it works:
-- Tracks timestamps of all requests in the window
-- Counts requests in the last N seconds/minutes
-- Provides smooth, accurate limiting
+- Tokens are continuously added to a bucket at a fixed rate per second.
+- Each request consumes $N$ tokens (typically 1).
+- Requests are permitted if sufficient tokens are available in the bucket.
+- The bucket has a maximum capacity limit (burst size).
 
 ### Configuration:
 ```go
-limiter, err := algorithms.NewSlidingWindow(algorithms.SlidingWindowConfig{
-    Limit:  100,           // 100 requests
-    Window: time.Minute,   // per minute
-    Store:  store,
-})
+limiter, err := rateshield.New(
+    rateshield.WithAlgorithm(rateshield.TokenBucketAlgorithm),
+    rateshield.WithRate(10),     // 10 tokens added per second
+    rateshield.WithCapacity(20), // Burst capacity of 20 tokens
+)
 ```
 
-### Pros:
-- Most accurate
-- No boundary issues
-- Smooth distribution
-
-### Cons:
-- Higher memory usage (stores timestamps)
-- More computation required
+### Characteristics:
+- **Burst Handling:** Excellent (controlled bursts up to capacity).
+- **Smoothness:** High.
+- **Memory:** $O(1)$.
+- **Performance:** Ultra-fast (<45ns in multi-key sharded memory).
 
 ---
 
-## Fixed Window
+## 2. Sliding Window Counter
 
-**Best for:** Simple rate limiting, high performance
+**Best for:** High-scale distributed web applications, Cloudflare-standard rate limiting.
 
 ### How it works:
-- Divides time into fixed windows (e.g., every minute)
-- Counts requests in each window
-- Resets count when window changes
+- Divides time into sliding windows and tracks request counts across the current and previous window boundaries.
+- Uses a weighted estimation formula:
+  $$\text{Count} = \text{Count}_{\text{prev}} \times \left(1 - \frac{t - t_{\text{start}}}{\text{window}}\right) + \text{Count}_{\text{curr}}$$
+- Provides smooth transitions across window boundaries without storing timestamps.
 
 ### Configuration:
 ```go
-limiter, err := algorithms.NewFixedWindow(algorithms.FixedWindowConfig{
-    Limit:  100,           // 100 requests
-    Window: time.Minute,   // per minute
-    Store:  store,
-})
+limiter, err := rateshield.New(
+    rateshield.WithAlgorithm(rateshield.SlidingWindowCounterAlgorithm),
+    rateshield.WithLimit(100),
+    rateshield.WithWindow(time.Minute),
+)
 ```
 
-### Pros:
-- Simple to understand
-- Low memory usage
-- Fast performance
-
-### Cons:
-- Boundary problem: 2x burst at window edges
-- Less smooth than other algorithms
+### Characteristics:
+- **Burst Handling:** Smooth boundary decay.
+- **Accuracy:** ~99.9% estimation accuracy.
+- **Memory:** $O(1)$ constant memory.
+- **Performance:** Extremely fast.
 
 ---
 
-## Comparison Table
+## 3. Fixed Window Counter
 
-| Algorithm      | Burst Handling | Accuracy | Memory | Performance |
-|----------------|----------------|----------|--------|-------------|
-| Token Bucket   | Controlled     | Good     | Low    | Fast        |
-| Sliding Window | None           | Best     | High   | Medium      |
-| Fixed Window   | At boundaries  | Good     | Low    | Fastest     |
+**Best for:** Periodic quotas (e.g. 10,000 requests/day, tier-based billing quotas).
 
-## Recommendations
+### How it works:
+- Divides time into discrete, fixed windows (e.g., top of the hour or minute).
+- Maintains a simple integer counter per window.
+- Counter resets immediately when the window timestamp rolls over.
 
-- **Public APIs:** Sliding Window (most fair)
-- **Internal Services:** Token Bucket (allows bursts)
-- **High Traffic:** Fixed Window (best performance)
-- **Premium Users:** Token Bucket with higher capacity
+### Configuration:
+```go
+limiter, err := rateshield.New(
+    rateshield.WithAlgorithm(rateshield.FixedWindowAlgorithm),
+    rateshield.WithLimit(1000),
+    rateshield.WithWindow(time.Hour),
+)
+```
+
+### Characteristics:
+- **Burst Handling:** Subject to boundary spikes (up to $2\times$ limit at window edges).
+- **Accuracy:** Exact per fixed window.
+- **Memory:** $O(1)$ lowest memory footprint.
+- **Performance:** Fastest.
+
+---
+
+## 4. Sliding Window Log
+
+**Best for:** Strict compliance auditing, financial transactions, zero-burst tolerance.
+
+### How it works:
+- Appends exact timestamp logs of every admitted request.
+- On each evaluation, evicts timestamps outside the window range and computes the exact count.
+
+### Configuration:
+```go
+limiter, err := rateshield.New(
+    rateshield.WithAlgorithm(rateshield.SlidingWindowAlgorithm),
+    rateshield.WithLimit(100),
+    rateshield.WithWindow(time.Minute),
+)
+```
+
+### Characteristics:
+- **Burst Handling:** Zero burst allowed beyond strict limit.
+- **Accuracy:** 100% mathematically exact.
+- **Memory:** $O(N)$ where $N$ is the number of active requests in the window.
+- **Performance:** Higher CPU overhead under very high QPS.
+
+---
+
+## Summary Comparison Matrix
+
+| Algorithm | Burst Handling | Accuracy | Memory Complexity | CPU Complexity | Recommended Use Case |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Token Bucket** | Controlled burst | High | $O(1)$ | $O(1)$ | Public REST APIs, Bursty Traffic |
+| **Sliding Window Counter** | Smooth decay | ~99.9% | $O(1)$ | $O(1)$ | Microservices, High-QPS Endpoints |
+| **Fixed Window** | Spike at boundary | Exact per window | $O(1)$ | $O(1)$ | Tier Quotas (Daily/Monthly) |
+| **Sliding Window Log** | Zero burst | 100% exact | $O(N)$ | $O(\log N)$ | Auditing, High-Security Endpoints |
