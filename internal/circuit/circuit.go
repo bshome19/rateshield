@@ -26,7 +26,6 @@ type Breaker struct {
 	state          int32 // State atomic
 	failureCount   int64
 	successCount   int64
-	lastStateCheck int64 // unix nano
 	openUntil      int64 // unix nano
 
 	failureThreshold int64

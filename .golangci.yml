@@ -1,14 +1,11 @@
-version: "2"
-
 run:
   timeout: 5m
 
 linters:
-  default: standard
-  settings:
-    staticcheck:
-      checks: ["all"]
-
-formatters:
   enable:
-    - gofmt
+    - staticcheck
+    - errcheck
+    - govet
+    - ineffassign
+    - unused
+    - gosimple
